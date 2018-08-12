@@ -1,0 +1,155 @@
+---
+  - name: POST
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_platform/v1/auth/generatetoken"
+      method: POST
+      user: "{{username}}"
+      password: "{{password}}"
+      validate_certs: no
+      force_basic_auth: yes
+      status_code: 204
+
+    register: token
+
+
+  - name: get token
+    set_fact:
+      acc_token: "{{token.x_auth_access_token}}"
+
+
+  - name: Get_Access_Policy
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_config/v1/domain/{{domain}}/policy/accesspolicies"
+      method: GET
+      headers:
+        "x-auth-access-token": "{{acc_token}}"
+        Connection: keep-alive
+      validate_certs: no
+      status_code: 200
+      body_format: json
+    register: accesspolicies
+
+  - name: get policy_json
+    set_fact:
+      policy_json: "{{accesspolicies.json}}"
+
+
+  - name: get policy array
+    set_fact:
+      policy_array: "{{policy_json | json_query('items[]')}}"
+
+  - name: get policy_id
+    set_fact:
+      policy_id: "{{lookup('template','/etc/ansible/roles/FMC-enable-policyrule/tasks/get_policy_id.j2') | trim}}"  #"trim" will remove the "\n" retrun from the j2 file
+
+  - name: Get_Access_Policy_roles
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_config/v1/domain/{{domain}}/policy/accesspolicies/{{policy_id}}/accessrules?expanded=true"
+      method: GET
+      headers:
+        "x-auth-access-token": "{{acc_token}}"
+      validate_certs: no
+      status_code: 200
+      body_format: json
+    register: accesspolicierules
+
+  - name: get policy_rule_json
+    set_fact:
+      policy__rule_json: "{{accesspolicierules.json}}"
+
+  - name: get policy rule array
+    set_fact:
+      policy_rule_array: "{{policy__rule_json | json_query('items[]')}}"
+
+  - name: get policy_rule_content
+    set_fact:
+      policy_rule_content: "{{lookup('template','/etc/ansible/roles/FMC-enable-policyrule/tasks/get_policy_rule_id.j2')}}"  #"trim" will remove the "\n" retrun from the j2 file
+
+  - name: modify the put json
+    set_fact:
+      policy_rule_put: "{{policy_rule_put|default({}) | combine({item.key: item.value})}}"
+    with_dict: "{{policy_rule_content}}"
+    when: (item.key != "links") and (item.key != "metadata")
+
+  - name: modify the "enable"
+    set_fact:
+      policy_rule_put: "{{policy_rule_put | combine({'enabled': true})}}"
+      config_has_been_changed: true
+    when: (policy_rule_put.enabled == false)
+
+  - name: PUT_Access_Policy_roles
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_config/v1/domain/{{domain}}/policy/accesspolicies/{{policy_id}}/accessrules/{{policy_rule_put.id}}"
+      method: PUT
+      headers:
+        "x-auth-access-token": "{{acc_token}}"
+      validate_certs: no
+      status_code: 200
+      body_format: json
+      body: "{{policy_rule_put}}"
+    when: config_has_been_changed
+
+# the above are the script to change the policy policy_rule_content
+# the following scripts are to get the deployable device list, version and make a POST call to apply configuation changes to the end devices
+
+  - name: Get_Deployment_Device_Info
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_config/v1/domain/{{domain}}/deployment/deployabledevices?expanded=true"
+      method: GET
+      headers:
+        "x-auth-access-token": "{{acc_token}}"
+        Connection: keep-alive
+      validate_certs: no
+      status_code: 200
+      body_format: json
+    register: DeployableDevice
+    when: config_has_been_changed
+
+  - name: get device_json
+    set_fact:
+      device_json: "{{DeployableDevice.json}}"
+    when: config_has_been_changed
+
+  - name: get device array
+    set_fact:
+      device_array: "{{DeployableDevice.json | json_query('items[]')}}"
+    when: config_has_been_changed
+
+  - name: get version number
+    set_fact:
+      deployment_version: "{{device_array[0].version}}"
+    when: config_has_been_changed
+
+  - name: get the deployment device list  # here we get all the deployable devices, NOT the policy we just changed
+    set_fact:
+      deployment_device_list: "{{deployment_device_list | default([])}} + ['{{item.device.id}}']"
+    with_items: "{{device_array}}"
+    no_log: true # don't display output for this session, since too much!
+    when: config_has_been_changed
+
+  - name: get JSON POST file
+    set_fact:
+      deployment_POST: "{{lookup('file','/etc/ansible/roles/FMC-enable-policyrule/tasks/deployment_POST.json')}}"
+    when: config_has_been_changed
+
+  - name: modify the version
+    set_fact:
+      deployment_POST: "{{deployment_POST | combine({'version': deployment_version})}}"
+    when: config_has_been_changed
+
+  - name: modify the deployment device list
+    set_fact:
+      deployment_POST: "{{deployment_POST | combine({'deviceList': deployment_device_list})}}"
+    when: config_has_been_changed
+
+  - name: Deployment POST
+    uri:
+      url: "https://{{FMC_IP}}/api/fmc_config/v1/domain/{{domain}}/deployment/deploymentrequests"
+      method: POST
+      headers:
+        "x-auth-access-token": "{{acc_token}}"
+      validate_certs: no
+      status_code: 202
+      body_format: json
+      body: "{{deployment_POST}}"
+    when: config_has_been_changed

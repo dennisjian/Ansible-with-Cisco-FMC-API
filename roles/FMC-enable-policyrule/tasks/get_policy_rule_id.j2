@@ -1,0 +1,5 @@
+{%- for item in policy_rule_array -%}
+  {%- if item.name == policy_rule_name -%}
+    {{ item }}
+  {%- endif -%}
+{%- endfor -%}

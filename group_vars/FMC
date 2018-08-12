@@ -1,0 +1,3 @@
+---
+  username: "{{FMC_username}}"
+  password: "{{FMC_pass}}"

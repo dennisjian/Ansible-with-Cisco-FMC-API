@@ -1,0 +1,7 @@
+---
+  - name: J2 test
+    set_fact:
+      result: "{{lookup('template','/etc/ansible/roles/test/tasks/test.j2')}}"
+
+  - debug: 
+      msg: "{{result|to_json}}"

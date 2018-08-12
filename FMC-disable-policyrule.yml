@@ -1,0 +1,6 @@
+---
+  - hosts: FMC
+    gather_facts: no
+    connection: local
+    roles:
+      - FMC-disable-policyrule

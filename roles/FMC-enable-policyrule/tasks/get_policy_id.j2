@@ -1,0 +1,5 @@
+{%- for item in policy_array -%}
+  {%- if item.name == policy_name -%}
+    {{ item.id }}
+  {%- endif -%}
+{%- endfor -%}

@@ -1,0 +1,13 @@
+interface {
+	interface ge-0/80/1 {
+		unit 0 {
+			family ethernet-switching {
+				port-mode access;
+				replace;
+				vlan {
+					members 200;
+				}
+			}
+		}
+	}
+}

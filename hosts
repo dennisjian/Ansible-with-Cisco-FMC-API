@@ -1,0 +1,6 @@
+[FMC]
+FMC ansible_host=192.168.1.205 ansible_hostname=FMC
+
+[local]
+127.0.0.1
+
