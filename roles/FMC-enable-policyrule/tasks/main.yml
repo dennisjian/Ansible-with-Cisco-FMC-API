@@ -105,11 +105,6 @@
     register: DeployableDevice
     when: config_has_been_changed
 
-  - name: get device_json
-    set_fact:
-      device_json: "{{DeployableDevice.json}}"
-    when: config_has_been_changed
-
   - name: get device array
     set_fact:
       device_array: "{{DeployableDevice.json | json_query('items[]')}}"
